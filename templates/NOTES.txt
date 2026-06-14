@@ -1,0 +1,57 @@
+Bambuddy has been deployed. 🐝
+
+Release:   {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+Image:     {{ include "bambuddy.image" . }}
+Database:  {{ .Values.database.type }}{{ if eq .Values.database.type "postgresql" }} (external){{ end }}
+
+1. Access the web UI:
+
+{{- if .Values.ingress.enabled }}
+   From your configured Ingress host(s):
+{{- range .Values.ingress.hosts }}
+   {{- range .paths }}
+     http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}{{ .path }}
+   {{- end }}
+{{- end }}
+{{- else if eq .Values.service.type "NodePort" }}
+   export NODE_PORT=$(kubectl get -n {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" svc {{ include "bambuddy.fullname" . }})
+   export NODE_IP=$(kubectl get nodes -n {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+   echo "http://$NODE_IP:$NODE_PORT"
+{{- else if eq .Values.service.type "LoadBalancer" }}
+   It may take a few minutes for the LoadBalancer IP to be available:
+   kubectl get -n {{ .Release.Namespace }} svc -w {{ include "bambuddy.fullname" . }}
+{{- else }}
+   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "bambuddy.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+   Then open http://127.0.0.1:{{ .Values.service.port }}
+{{- end }}
+
+2. Persistence:
+{{- if .Values.persistence.data.enabled }}
+   - Data  (/app/data): PVC {{ include "bambuddy.dataClaimName" . }} ({{ .Values.persistence.data.size }})
+{{- else }}
+   - Data  (/app/data): NOT persistent (emptyDir) — your database and archive will be lost on pod restart!
+{{- end }}
+{{- if .Values.persistence.logs.enabled }}
+   - Logs  (/app/logs): PVC {{ include "bambuddy.logsClaimName" . }} ({{ .Values.persistence.logs.size }})
+{{- else }}
+   - Logs  (/app/logs): NOT persistent (emptyDir)
+{{- end }}
+
+{{- if not .Values.hostNetwork }}
+
+3. Printer discovery:
+   This release does NOT use host networking. Automatic SSDP/multicast printer
+   discovery and camera streaming may not work. On Linux, set `hostNetwork: true`
+   for full functionality, or add printers manually by IP. For the virtual printer
+   without host networking, enable `service.virtualPrinter.enabled` and set
+   `config.virtualPrinterPasvAddress` to your node's LAN IP.
+{{- end }}
+
+{{- if gt (int .Values.replicaCount) 1 }}
+
+⚠️  replicaCount is {{ .Values.replicaCount }}. Bambuddy is single-instance; running more than
+   one replica with SQLite and/or a ReadWriteOnce volume will fail or corrupt data.
+{{- end }}
+
+Run `helm test {{ .Release.Name }} -n {{ .Release.Namespace }}` to verify the web port is reachable.

@@ -1,0 +1,30 @@
+{{- if and .Values.persistence.logs.enabled (not .Values.persistence.logs.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "bambuddy.logsClaimName" . }}
+  labels:
+    {{- include "bambuddy.labels" . | nindent 4 }}
+  {{- if or .Values.persistence.logs.annotations .Values.persistence.logs.retain }}
+  annotations:
+    {{- if .Values.persistence.logs.retain }}
+    helm.sh/resource-policy: keep
+    {{- end }}
+    {{- with .Values.persistence.logs.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.logs.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.logs.size | quote }}
+  {{- if .Values.persistence.logs.storageClass }}
+  {{- if (eq "-" .Values.persistence.logs.storageClass) }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ .Values.persistence.logs.storageClass | quote }}
+  {{- end }}
+  {{- end }}
+{{- end }}

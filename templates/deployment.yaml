@@ -1,0 +1,266 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bambuddy.fullname" . }}
+  labels:
+    {{- include "bambuddy.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "bambuddy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if eq (include "bambuddy.createSecret" .) "true" }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "bambuddy.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "bambuddy.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.hostNetwork }}
+      hostNetwork: true
+      dnsPolicy: {{ default "ClusterFirstWithHostNet" .Values.dnsPolicy }}
+      {{- else if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bambuddy
+          image: {{ include "bambuddy.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: web
+              containerPort: {{ .Values.config.port }}
+              protocol: TCP
+            {{- if .Values.service.virtualPrinter.enabled }}
+            {{- $vp := .Values.service.virtualPrinter }}
+            - name: vp-bind
+              containerPort: {{ $vp.ports.bind }}
+              protocol: TCP
+            - name: vp-bind-alt
+              containerPort: {{ $vp.ports.bindAlt }}
+              protocol: TCP
+            - name: vp-ftps
+              containerPort: {{ $vp.ports.ftps }}
+              protocol: TCP
+            - name: vp-mqtt
+              containerPort: {{ $vp.ports.mqtt }}
+              protocol: TCP
+            - name: vp-filexfer
+              containerPort: {{ $vp.ports.fileTransfer }}
+              protocol: TCP
+            - name: vp-rtsp
+              containerPort: {{ $vp.ports.rtsp }}
+              protocol: TCP
+            {{- range untilStep (int $vp.proprietaryRange.start) (int (add (int $vp.proprietaryRange.end) 1)) 1 }}
+            - name: vp-prop-{{ . }}
+              containerPort: {{ . }}
+              protocol: TCP
+            {{- end }}
+            {{- range untilStep (int $vp.passiveRange.start) (int (add (int $vp.passiveRange.end) 1)) 1 }}
+            - name: vp-pasv-{{ . }}
+              containerPort: {{ . }}
+              protocol: TCP
+            {{- end }}
+            {{- end }}
+          env:
+            {{- with .Values.config.tz }}
+            - name: TZ
+              value: {{ . | quote }}
+            {{- end }}
+            - name: PORT
+              value: {{ .Values.config.port | quote }}
+            - name: DEBUG
+              value: {{ .Values.config.debug | quote }}
+            {{- with .Values.config.logLevel }}
+            - name: LOG_LEVEL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.trustedFrameOrigins }}
+            - name: TRUSTED_FRAME_ORIGINS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.config.useSystemTrustStore }}
+            - name: USE_SYSTEM_TRUST_STORE
+              value: "true"
+            {{- end }}
+            {{- with .Values.config.externalRoots }}
+            - name: BAMBUDDY_EXTERNAL_ROOTS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.virtualPrinterPasvAddress }}
+            - name: VIRTUAL_PRINTER_PASV_ADDRESS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.slicerApiUrl }}
+            - name: SLICER_API_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.puid }}
+            - name: PUID
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.pgid }}
+            - name: PGID
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.homeAssistant.url }}
+            - name: HA_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if or .Values.config.homeAssistant.token .Values.config.homeAssistant.existingSecret }}
+            - name: HA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.config.homeAssistant.existingSecret }}
+                  name: {{ .Values.config.homeAssistant.existingSecret }}
+                  key: {{ .Values.config.homeAssistant.existingSecretKey }}
+                  {{- else }}
+                  name: {{ include "bambuddy.secretName" . }}
+                  key: ha-token
+                  {{- end }}
+            {{- end }}
+            {{- if or .Values.config.mfa.encryptionKey .Values.config.mfa.existingSecret }}
+            - name: MFA_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.config.mfa.existingSecret }}
+                  name: {{ .Values.config.mfa.existingSecret }}
+                  key: {{ .Values.config.mfa.existingSecretKey }}
+                  {{- else }}
+                  name: {{ include "bambuddy.secretName" . }}
+                  key: mfa-encryption-key
+                  {{- end }}
+            {{- end }}
+            {{- if eq .Values.database.type "postgresql" }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.database.externalDatabase.existingSecret }}
+                  name: {{ .Values.database.externalDatabase.existingSecret }}
+                  key: {{ .Values.database.externalDatabase.existingSecretUrlKey }}
+                  {{- else }}
+                  name: {{ include "bambuddy.secretName" . }}
+                  key: database-url
+                  {{- end }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: logs
+              mountPath: /app/logs
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            {{- if .Values.livenessProbe.custom }}
+            {{- toYaml .Values.livenessProbe.custom | nindent 12 }}
+            {{- else }}
+            tcpSocket:
+              port: web
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+            {{- end }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            {{- if .Values.readinessProbe.custom }}
+            {{- toYaml .Values.readinessProbe.custom | nindent 12 }}
+            {{- else }}
+            tcpSocket:
+              port: web
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+            {{- end }}
+          {{- end }}
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            {{- if .Values.startupProbe.custom }}
+            {{- toYaml .Values.startupProbe.custom | nindent 12 }}
+            {{- else }}
+            tcpSocket:
+              port: web
+            initialDelaySeconds: {{ .Values.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+            {{- end }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- with .Values.sidecars }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.data.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "bambuddy.dataClaimName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: logs
+          {{- if .Values.persistence.logs.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "bambuddy.logsClaimName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

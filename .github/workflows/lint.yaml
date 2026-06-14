@@ -1,0 +1,36 @@
+name: Lint and Test Chart
+
+# Validates the chart on pull requests: lint + template render against the
+# default values and both ci/ value sets (which also exercises values.schema.json).
+
+on:
+  pull_request:
+    paths:
+      - 'Chart.yaml'
+      - 'values.yaml'
+      - 'values.schema.json'
+      - 'templates/**'
+      - 'ci/**'
+      - '.github/workflows/lint.yaml'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm lint
+        run: |
+          helm lint .
+          helm lint . --values ci/sqlite-values.yaml
+          helm lint . --values ci/postgres-values.yaml
+
+      - name: Helm template (default / SQLite)
+        run: helm template release . > /dev/null
+
+      - name: Helm template (external PostgreSQL + virtual printer + extraObjects)
+        run: helm template release . --values ci/postgres-values.yaml > /dev/null

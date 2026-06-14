@@ -1,0 +1,35 @@
+# External PostgreSQL deployment, virtual printer enabled, plus an extraObjects example.
+config:
+  tz: "America/New_York"
+  homeAssistant:
+    url: "https://homeassistant.local:8123"
+    token: "example-ha-token"
+  mfa:
+    encryptionKey: "example-mfa-key"
+
+database:
+  type: postgresql
+  externalDatabase:
+    host: postgres.databases.svc.cluster.local
+    port: 5432
+    user: bambuddy
+    database: bambuddy
+    password: "s3cr3t"
+    sslmode: require
+
+service:
+  virtualPrinter:
+    enabled: true
+
+hostNetwork: false
+
+extraObjects:
+  - |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: {{ include "bambuddy.fullname" . }}-extra
+      labels:
+        {{- include "bambuddy.labels" . | nindent 4 }}
+    data:
+      hello: "world"

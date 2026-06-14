@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Bambuddy Helm chart values",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+        "tag": { "type": "string" }
+      },
+      "required": ["repository"]
+    },
+    "config": {
+      "type": "object",
+      "properties": {
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "debug": { "type": "boolean" },
+        "logLevel": { "type": "string", "enum": ["DEBUG", "INFO", "WARNING", "ERROR"] },
+        "useSystemTrustStore": { "type": "boolean" }
+      }
+    },
+    "database": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["sqlite", "postgresql"] },
+        "externalDatabase": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string" },
+            "port": { "type": ["integer", "string"] },
+            "user": { "type": "string" },
+            "database": { "type": "string" },
+            "password": { "type": "string" },
+            "sslmode": { "type": "string" },
+            "url": { "type": "string" },
+            "existingSecret": { "type": "string" },
+            "existingSecretUrlKey": { "type": "string" }
+          }
+        }
+      },
+      "required": ["type"]
+    },
+    "persistence": {
+      "type": "object",
+      "properties": {
+        "data": { "$ref": "#/definitions/pvc" },
+        "logs": { "$ref": "#/definitions/pvc" }
+      }
+    },
+    "hostNetwork": { "type": "boolean" },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "extraObjects": {
+      "type": "array"
+    }
+  },
+  "definitions": {
+    "pvc": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "existingClaim": { "type": "string" },
+        "storageClass": { "type": "string" },
+        "accessModes": { "type": "array", "items": { "type": "string" } },
+        "size": { "type": "string" },
+        "retain": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+# Patterns to ignore when building packages.
+.DS_Store
+.git/
+.gitignore
+*.tmproj
+*.bak
+*.tgz
+*.swp
+.idea/
+.vscode/
+ci/
+.github/
+.claude/
+.cr-release-packages/

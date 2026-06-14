@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bambuddy.fullname" . }}
+  labels:
+    {{- include "bambuddy.labels" . | nindent 4 }}
+    {{- with .Values.service.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  {{- if and (eq .Values.service.type "LoadBalancer") .Values.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.service.loadBalancerIP }}
+  {{- end }}
+  selector:
+    {{- include "bambuddy.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: web
+      port: {{ .Values.service.port }}
+      targetPort: web
+      protocol: TCP
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort }}
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}
+    {{- if .Values.service.virtualPrinter.enabled }}
+    {{- $vp := .Values.service.virtualPrinter }}
+    - name: vp-bind
+      port: {{ $vp.ports.bind }}
+      targetPort: vp-bind
+      protocol: TCP
+    - name: vp-bind-alt
+      port: {{ $vp.ports.bindAlt }}
+      targetPort: vp-bind-alt
+      protocol: TCP
+    - name: vp-ftps
+      port: {{ $vp.ports.ftps }}
+      targetPort: vp-ftps
+      protocol: TCP
+    - name: vp-mqtt
+      port: {{ $vp.ports.mqtt }}
+      targetPort: vp-mqtt
+      protocol: TCP
+    - name: vp-filexfer
+      port: {{ $vp.ports.fileTransfer }}
+      targetPort: vp-filexfer
+      protocol: TCP
+    - name: vp-rtsp
+      port: {{ $vp.ports.rtsp }}
+      targetPort: vp-rtsp
+      protocol: TCP
+    {{- range untilStep (int $vp.proprietaryRange.start) (int (add (int $vp.proprietaryRange.end) 1)) 1 }}
+    - name: vp-prop-{{ . }}
+      port: {{ . }}
+      targetPort: {{ . }}
+      protocol: TCP
+    {{- end }}
+    {{- range untilStep (int $vp.passiveRange.start) (int (add (int $vp.passiveRange.end) 1)) 1 }}
+    - name: vp-pasv-{{ . }}
+      port: {{ . }}
+      targetPort: {{ . }}
+      protocol: TCP
+    {{- end }}
+    {{- end }}

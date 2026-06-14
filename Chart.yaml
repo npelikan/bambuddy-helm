@@ -1,0 +1,28 @@
+apiVersion: v2
+name: bambuddy
+description: |
+  Bambuddy - a self-hosted command center for Bambu Lab 3D printers.
+  "Your printers. No cloud. Your rules."
+type: application
+# version is the chart version; bump on any chart change.
+version: 0.1.0
+# appVersion is the pinned upstream bambuddy image tag deployed by default.
+# Bump this (and `version` above) when adopting a newer bambuddy release.
+# Image tags: https://github.com/maziggy/bambuddy/releases (tag without the leading "v").
+appVersion: "0.2.4.7"
+home: https://bambuddy.cool
+sources:
+  - https://github.com/maziggy/bambuddy
+keywords:
+  - bambuddy
+  - bambu-lab
+  - 3d-printing
+  - printer-management
+  - self-hosted
+maintainers:
+  - name: Nick Pelikan
+    url: https://github.com/npelikan/bambuddy-helm
+icon: https://raw.githubusercontent.com/maziggy/bambuddy/main/frontend/public/favicon.png
+annotations:
+  category: Hardware
+  licenses: AGPL-3.0

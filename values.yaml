@@ -1,0 +1,356 @@
+# Default values for bambuddy.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# -- Number of replicas. Bambuddy is a single-instance, stateful application
+# (SQLite on a ReadWriteOnce volume). Do NOT increase above 1 unless you are
+# using an external database AND a ReadWriteMany volume for /app/data.
+replicaCount: 1
+
+image:
+  # -- Bambuddy container image repository. Docker Hub alternative: `maziggy/bambuddy`.
+  repository: ghcr.io/maziggy/bambuddy
+  # -- Image pull policy.
+  pullPolicy: IfNotPresent
+  # -- Image tag (pins the bambuddy version). Defaults to the chart's pinned
+  # `appVersion` when empty. Set explicitly to override, e.g. `0.2.4.7`.
+  # Available tags: https://github.com/maziggy/bambuddy/releases (drop the leading "v").
+  tag: ""
+
+# -- Image pull secrets for private registries.
+imagePullSecrets: []
+# -- Override the chart name used in resource names.
+nameOverride: ""
+# -- Fully override the generated resource name.
+fullnameOverride: ""
+
+# -----------------------------------------------------------------------------
+# Bambuddy application configuration. Each key maps to a documented environment
+# variable. Empty values are omitted so the application falls back to its own
+# defaults. See https://wiki.bambuddy.cool/getting-started/docker/#configuration
+# -----------------------------------------------------------------------------
+config:
+  # -- Timezone (env `TZ`), e.g. `Europe/Berlin`, `America/New_York`.
+  tz: "UTC"
+  # -- Web service port the app listens on (env `PORT`). Also the container/Service web port.
+  port: 8000
+  # -- Enable debug logging (env `DEBUG`).
+  debug: false
+  # -- Logging verbosity (env `LOG_LEVEL`): DEBUG, INFO, WARNING, ERROR.
+  logLevel: "INFO"
+  # -- Comma-separated origins allowed to embed Bambuddy in an iframe (env `TRUSTED_FRAME_ORIGINS`).
+  trustedFrameOrigins: ""
+  # -- Enable use of the system CA trust store, e.g. for self-signed certs (env `USE_SYSTEM_TRUST_STORE`).
+  useSystemTrustStore: false
+  # -- Colon-separated paths to external library folders (env `BAMBUDDY_EXTERNAL_ROOTS`).
+  # Mount the corresponding paths via `extraVolumes`/`extraVolumeMounts`.
+  externalRoots: ""
+  # -- Docker/Kubernetes host LAN IP advertised for FTP passive mode of the virtual printer
+  # (env `VIRTUAL_PRINTER_PASV_ADDRESS`). Required for virtual-printer FTP when not using host networking.
+  virtualPrinterPasvAddress: ""
+  # -- URL of an external slicer API service (env `SLICER_API_URL`).
+  slicerApiUrl: ""
+
+  homeAssistant:
+    # -- Home Assistant base URL for integration (env `HA_URL`).
+    url: ""
+    # -- Home Assistant long-lived access token (env `HA_TOKEN`). Stored in a Secret.
+    token: ""
+    # -- Reference an existing Secret holding the HA token instead of `token` above.
+    existingSecret: ""
+    # -- Key within `existingSecret` that holds the HA token.
+    existingSecretKey: "ha-token"
+
+  mfa:
+    # -- Encryption key used to encrypt MFA secrets at rest (env `MFA_ENCRYPTION_KEY`). Stored in a Secret.
+    encryptionKey: ""
+    # -- Reference an existing Secret holding the MFA encryption key instead of `encryptionKey` above.
+    existingSecret: ""
+    # -- Key within `existingSecret` that holds the MFA encryption key.
+    existingSecretKey: "mfa-encryption-key"
+
+  # -- User ID the container process runs as (env `PUID`). Leave empty to rely on
+  # `podSecurityContext.runAsUser`. Set both consistently if you use it.
+  puid: ""
+  # -- Group ID the container process runs as (env `PGID`). Leave empty to rely on
+  # `podSecurityContext.runAsGroup`/`fsGroup`.
+  pgid: ""
+
+# -----------------------------------------------------------------------------
+# Database. Defaults to the built-in SQLite (zero configuration). Set
+# `database.type: postgresql` and fill in `externalDatabase` to use an external
+# PostgreSQL server. No database is deployed by this chart.
+# -----------------------------------------------------------------------------
+database:
+  # -- Database backend: `sqlite` (default, file on the data PVC) or `postgresql` (external).
+  type: sqlite
+  externalDatabase:
+    # -- PostgreSQL hostname.
+    host: ""
+    # -- PostgreSQL port.
+    port: 5432
+    # -- PostgreSQL username.
+    user: bambuddy
+    # -- PostgreSQL database name.
+    database: bambuddy
+    # -- PostgreSQL password (inline). Combined with the fields above into a
+    # `DATABASE_URL` stored in a chart-managed Secret. Prefer `existingSecret` for production.
+    password: ""
+    # -- Optional `sslmode` query parameter appended to the connection URL (e.g. `require`).
+    sslmode: ""
+    # -- Full `DATABASE_URL` inline override. When set, it wins over the host/port/user/...
+    # fields above and is stored (with credentials) in the chart-managed Secret.
+    # Example: `postgresql+asyncpg://user:pass@host:5432/bambuddy`
+    url: ""
+    # -- Reference an existing Secret that already contains the FULL connection URL.
+    # When set, the chart does not build or store any database credentials itself.
+    existingSecret: ""
+    # -- Key within `existingSecret` that holds the full `DATABASE_URL`.
+    existingSecretUrlKey: "database-url"
+
+# -----------------------------------------------------------------------------
+# Persistence. Data is persistent by default. `/app/data` holds the database,
+# print archive and application data; `/app/logs` holds application logs.
+# -----------------------------------------------------------------------------
+persistence:
+  data:
+    # -- Persist `/app/data`. Strongly recommended (holds DB, archive, app data).
+    enabled: true
+    # -- Use an existing PVC instead of creating one.
+    existingClaim: ""
+    # -- StorageClass for the data PVC. Empty uses the cluster default.
+    storageClass: ""
+    # -- Access modes for the data PVC.
+    accessModes:
+      - ReadWriteOnce
+    # -- Size of the data PVC.
+    size: 10Gi
+    # -- Extra annotations for the data PVC.
+    annotations: {}
+    # -- Keep the PVC on `helm uninstall` (adds `helm.sh/resource-policy: keep`).
+    retain: false
+  logs:
+    # -- Persist `/app/logs`.
+    enabled: true
+    # -- Use an existing PVC instead of creating one.
+    existingClaim: ""
+    # -- StorageClass for the logs PVC. Empty uses the cluster default.
+    storageClass: ""
+    # -- Access modes for the logs PVC.
+    accessModes:
+      - ReadWriteOnce
+    # -- Size of the logs PVC.
+    size: 2Gi
+    # -- Extra annotations for the logs PVC.
+    annotations: {}
+    # -- Keep the PVC on `helm uninstall` (adds `helm.sh/resource-policy: keep`).
+    retain: false
+
+# -----------------------------------------------------------------------------
+# Networking
+# -----------------------------------------------------------------------------
+# -- Use the host network namespace. Recommended on Linux for SSDP/multicast
+# printer auto-discovery and camera streaming. When true, `dnsPolicy` is set to
+# `ClusterFirstWithHostNet` automatically unless overridden.
+hostNetwork: false
+# -- Pod DNS policy. Leave empty for the default behaviour (auto when `hostNetwork`).
+dnsPolicy: ""
+
+service:
+  # -- Service type for the web UI.
+  type: ClusterIP
+  # -- Service port for the web UI. The target/container port is `config.port`.
+  port: 8000
+  # -- NodePort for the web port (only when `type: NodePort`).
+  nodePort: ""
+  # -- Extra annotations for the Service.
+  annotations: {}
+  # -- Extra labels for the Service.
+  labels: {}
+  # -- loadBalancerIP (only when `type: LoadBalancer`).
+  loadBalancerIP: ""
+  # Virtual-printer / remote-printing ports. Enable when using Bambuddy's virtual
+  # printer feature without host networking. See the docs for what each port is for.
+  virtualPrinter:
+    # -- Expose the virtual-printer ports on the container and Service.
+    enabled: false
+    ports:
+      # -- Virtual printer bind/detect.
+      bind: 3000
+      # -- Virtual printer bind/detect (alternate).
+      bindAlt: 3002
+      # -- Virtual printer FTPS.
+      ftps: 990
+      # -- Virtual printer MQTT.
+      mqtt: 8883
+      # -- Virtual printer file transfer tunnel.
+      fileTransfer: 6000
+      # -- Virtual printer RTSP camera (X1/H2/P2).
+      rtsp: 322
+    # -- Proprietary port range (A1/P1S), inclusive.
+    proprietaryRange:
+      start: 2024
+      end: 2026
+    # -- FTP passive data port range (10 ports per virtual printer), inclusive.
+    passiveRange:
+      start: 50000
+      end: 50029
+
+ingress:
+  # -- Enable an Ingress for the web UI.
+  enabled: false
+  # -- IngressClass name.
+  className: ""
+  # -- Ingress annotations.
+  annotations: {}
+  # -- Ingress hosts and paths.
+  hosts:
+    - host: bambuddy.local
+      paths:
+        - path: /
+          pathType: Prefix
+  # -- TLS configuration.
+  tls: []
+  #  - secretName: bambuddy-tls
+  #    hosts:
+  #      - bambuddy.local
+
+# -----------------------------------------------------------------------------
+# Workload / pod settings
+# -----------------------------------------------------------------------------
+# -- Deployment update strategy. `Recreate` is required when using RWO persistence
+# (the old pod must release the volume before the new one starts).
+updateStrategy:
+  type: Recreate
+
+serviceAccount:
+  # -- Create a ServiceAccount.
+  create: true
+  # -- Name of the ServiceAccount. Generated if empty and `create` is true.
+  name: ""
+  # -- ServiceAccount annotations.
+  annotations: {}
+  # -- Auto-mount the ServiceAccount token.
+  automount: false
+
+# -- Extra annotations for the pod.
+podAnnotations: {}
+# -- Extra labels for the pod.
+podLabels: {}
+
+# -- Pod-level security context. `fsGroup` ensures the non-root process can write the PVCs.
+podSecurityContext:
+  fsGroup: 1000
+  # runAsUser: 1000
+  # runAsGroup: 1000
+
+# -- Container-level security context. `NET_BIND_SERVICE` lets the non-root process
+# bind privileged virtual-printer ports (322, 990).
+securityContext:
+  capabilities:
+    add:
+      - NET_BIND_SERVICE
+  # runAsNonRoot: true
+  # readOnlyRootFilesystem: false
+
+# -- Resource requests/limits.
+resources: {}
+  # limits:
+  #   cpu: 1000m
+  #   memory: 1Gi
+  # requests:
+  #   cpu: 250m
+  #   memory: 512Mi
+
+livenessProbe:
+  # -- Enable the liveness probe (TCP connect to the web port; no documented HTTP health path).
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 6
+  # -- Override the probe entirely (replaces the default tcpSocket probe).
+  custom: {}
+
+readinessProbe:
+  # -- Enable the readiness probe (TCP connect to the web port).
+  enabled: true
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+  # -- Override the probe entirely (replaces the default tcpSocket probe).
+  custom: {}
+
+startupProbe:
+  # -- Enable a startup probe (TCP connect to the web port).
+  enabled: false
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+  custom: {}
+
+# -- Node selector.
+nodeSelector: {}
+# -- Tolerations.
+tolerations: []
+# -- Affinity rules.
+affinity: {}
+# -- Pod priority class name.
+priorityClassName: ""
+# -- Termination grace period (seconds).
+terminationGracePeriodSeconds: 30
+
+# -----------------------------------------------------------------------------
+# Extensibility
+# -----------------------------------------------------------------------------
+# -- Extra environment variables (list of {name,value} or valueFrom maps).
+extraEnv: []
+#  - name: SOME_FLAG
+#    value: "true"
+
+# -- Extra envFrom sources (configMapRef/secretRef).
+extraEnvFrom: []
+#  - secretRef:
+#      name: my-extra-secret
+
+# -- Extra volumes added to the pod.
+extraVolumes: []
+#  - name: external-library
+#    nfs:
+#      server: nas.local
+#      path: /export/models
+
+# -- Extra volume mounts added to the bambuddy container.
+extraVolumeMounts: []
+#  - name: external-library
+#    mountPath: /mnt/models
+#    readOnly: true
+
+# -- Extra init containers.
+initContainers: []
+# -- Extra sidecar containers.
+sidecars: []
+
+# -- Arbitrary Kubernetes manifests rendered as-is. Each entry is treated as a
+# Helm template (supports `{{ }}`), so you can reference release values. Useful for
+# NetworkPolicies, ServiceMonitors, an extra LoadBalancer Service for the printer
+# ports, ExternalSecrets, etc. Provide each entry as a YAML block-scalar string
+# (use `|`) so the embedded templates are passed through literally.
+extraObjects: []
+#  - |
+#    apiVersion: v1
+#    kind: Service
+#    metadata:
+#      name: {{ include "bambuddy.fullname" . }}-printer-lb
+#      labels:
+#        {{- include "bambuddy.labels" . | nindent 8 }}
+#    spec:
+#      type: LoadBalancer
+#      selector:
+#        {{- include "bambuddy.selectorLabels" . | nindent 8 }}
+#      ports:
+#        - name: mqtt
+#          port: 8883
+#          targetPort: vp-mqtt

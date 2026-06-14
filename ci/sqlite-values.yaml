@@ -1,0 +1,15 @@
+# Default SQLite deployment with persistence (the recommended starting point).
+config:
+  tz: "Europe/Berlin"
+  logLevel: "INFO"
+
+database:
+  type: sqlite
+
+persistence:
+  data:
+    enabled: true
+    size: 10Gi
+  logs:
+    enabled: true
+    size: 2Gi
