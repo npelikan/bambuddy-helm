@@ -1,0 +1,128 @@
+name: Watch Upstream Bambuddy
+
+# Watches the upstream maziggy/bambuddy repo for new STABLE releases. When one is
+# found that is newer than the version this chart pins, it bumps Chart.yaml
+# (appVersion -> the new image tag, version -> next patch) and the README, then
+# opens (or updates) a pull request.
+#
+# "Stable" excludes prereleases AND beta/daily tags. Note that upstream does NOT
+# flag its `bN` beta tags as prereleases, so we additionally require a purely
+# numeric tag (e.g. 0.2.4.7) and reject anything containing letters/suffixes.
+#
+# Requirements (repo Settings -> Actions -> General -> Workflow permissions):
+#   * "Read and write permissions"
+#   * "Allow GitHub Actions to create and approve pull requests"
+# The bump PR is opened with GITHUB_TOKEN, so it will NOT itself trigger the
+# pull_request workflows (e.g. lint). Supply a PAT via the `token:` input below
+# if you want CI to run on the generated PR.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # daily at 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine target version
+        id: vers
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM: maziggy/bambuddy
+        run: |
+          set -euo pipefail
+
+          # Newest stable upstream tag: not a draft/prerelease, and purely numeric
+          # (rejects v0.2.4b2, v0.2.5b1-daily.*, rc/alpha/etc.). Strip the leading "v"
+          # since the container image tags drop it.
+          latest=$(gh api "repos/${UPSTREAM}/releases" --paginate \
+            --jq '.[] | select(.prerelease==false and .draft==false) | .tag_name' \
+            | grep -E '^v?[0-9]+(\.[0-9]+)+$' \
+            | sed 's/^v//' \
+            | sort -V | tail -1)
+          if [ -z "${latest}" ]; then
+            echo "::error::Could not determine a stable upstream release." >&2
+            exit 1
+          fi
+
+          current=$(grep -E '^appVersion:' Chart.yaml | sed -E 's/^appVersion:[[:space:]]*"?([^"]*)"?.*/\1/')
+          chart=$(grep -E '^version:' Chart.yaml | sed -E 's/^version:[[:space:]]*//')
+
+          echo "Upstream latest stable : ${latest}"
+          echo "Current appVersion     : ${current}"
+          echo "Current chart version  : ${chart}"
+
+          # Only act when upstream is STRICTLY newer than the current pin.
+          newest=$(printf '%s\n%s\n' "${current}" "${latest}" | sort -V | tail -1)
+          if [ "${latest}" = "${current}" ] || [ "${newest}" != "${latest}" ]; then
+            echo "Already up to date (or current pin is ahead). Nothing to do."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Make sure the matching multi-arch container image actually exists on ghcr.io
+          # before proposing a bump (release tags don't always have a published image).
+          img="${UPSTREAM}"
+          tok=$(curl -fsSL "https://ghcr.io/token?scope=repository:${img}:pull" | jq -r .token)
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${tok}" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json' \
+            -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
+            "https://ghcr.io/v2/${img}/manifests/${latest}")
+          if [ "${code}" != "200" ]; then
+            echo "::error::Image ghcr.io/${img}:${latest} not found (HTTP ${code}); aborting." >&2
+            exit 1
+          fi
+
+          # Bump the chart version's patch component (x.y.Z -> x.y.Z+1).
+          new_chart=$(echo "${chart}" | awk -F. -v OFS=. '{$NF=$NF+1; print}')
+
+          {
+            echo "changed=true"
+            echo "old_app_version=${current}"
+            echo "app_version=${latest}"
+            echo "chart_version=${new_chart}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Apply version bump
+        if: steps.vers.outputs.changed == 'true'
+        env:
+          OLD_APP_VERSION: ${{ steps.vers.outputs.old_app_version }}
+          APP_VERSION: ${{ steps.vers.outputs.app_version }}
+          CHART_VERSION: ${{ steps.vers.outputs.chart_version }}
+        run: |
+          set -euo pipefail
+          sed -i -E "s/^version: .*/version: ${CHART_VERSION}/" Chart.yaml
+          sed -i -E "s/^appVersion: .*/appVersion: \"${APP_VERSION}\"/" Chart.yaml
+          sed -i "s/currently \`${OLD_APP_VERSION}\`/currently \`${APP_VERSION}\`/" README.md
+
+      - name: Create pull request
+        if: steps.vers.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/bump-bambuddy
+          delete-branch: true
+          commit-message: "chore: bump bambuddy to ${{ steps.vers.outputs.app_version }}"
+          title: "chore: bump bambuddy to ${{ steps.vers.outputs.app_version }}"
+          body: |
+            A new stable [bambuddy](https://github.com/maziggy/bambuddy/releases) release was detected.
+
+            | | From | To |
+            | --- | --- | --- |
+            | `appVersion` (image tag) | `${{ steps.vers.outputs.old_app_version }}` | `${{ steps.vers.outputs.app_version }}` |
+            | chart `version` | (current) | `${{ steps.vers.outputs.chart_version }}` |
+
+            Image: `ghcr.io/maziggy/bambuddy:${{ steps.vers.outputs.app_version }}`
+            Release notes: https://github.com/maziggy/bambuddy/releases/tag/v${{ steps.vers.outputs.app_version }}
+
+            ---
+            _Opened automatically by the `Watch Upstream Bambuddy` workflow._
