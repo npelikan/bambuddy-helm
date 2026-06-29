@@ -5,11 +5,11 @@ description: |
   "Your printers. No cloud. Your rules."
 type: application
 # version is the chart version; bump on any chart change.
-version: 0.1.0
+version: 0.1.1
 # appVersion is the pinned upstream bambuddy image tag deployed by default.
 # Bump this (and `version` above) when adopting a newer bambuddy release.
 # Image tags: https://github.com/maziggy/bambuddy/releases (tag without the leading "v").
-appVersion: "0.2.4.7"
+appVersion: "0.2.4.8"
 home: https://bambuddy.cool
 sources:
   - https://github.com/maziggy/bambuddy
