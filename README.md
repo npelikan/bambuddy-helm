@@ -4,7 +4,7 @@ A Helm chart for [Bambuddy](https://github.com/maziggy/bambuddy) — a self-host
 Bambu Lab 3D printers. *"Your printers. No cloud. Your rules."*
 
 - **Image:** `ghcr.io/maziggy/bambuddy`, pinned to a specific version via the chart's `appVersion`
-  (currently `0.2.4.8`). Override with `image.tag`.
+  (currently `0.2.4.9`). Override with `image.tag`.
 - **Default datastore:** SQLite (on a persistent volume), with optional external PostgreSQL.
 - **Persistence:** enabled by default for both `/app/data` and `/app/logs`.
 
